@@ -1,0 +1,313 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id              String    @id @default(cuid())
+  name            String
+  orgNumber       String    @unique
+  address         String
+  postalCode      String
+  city            String
+  country         String    @default("NO")
+  email           String?
+  phone           String?
+  bankAccount     String?
+  logoUrl         String?
+  isDefault       Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  invoices        Invoice[]
+  products        Product[]
+  apiKeys         ApiKey[]
+}
+
+model Customer {
+  customerNumber Int?       @unique
+  id          String    @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  postalCode  String?
+  city        String?
+  country     String    @default("NO")
+  orgNumber   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  invoices    Invoice[]
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  unitPrice      Float
+  vatRate        Float         @default(0.25)
+  unit           String        @default("stk")
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  invoiceLines   InvoiceLine[]
+}
+
+model Invoice {
+  id              String          @id @default(cuid())
+  invoiceNumber   String          @unique
+  status          InvoiceStatus   @default(DRAFT)
+  issueDate       DateTime        @default(now())
+  dueDate         DateTime
+  subtotal        Float
+  vatAmount       Float
+  totalAmount     Float
+  currency        String          @default("NOK")
+  kid             String?
+  pdfUrl          String?
+  notes           String?
+  source          String?
+  sourceOrderId   String?
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  customerId      String
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  lines           InvoiceLine[]
+  payments        Payment[]
+  emailLogs       EmailLog[]
+  paperMailLogs   PaperMailLog[]
+  attachments     Attachment[]
+  reminders       Reminder[]
+  creditNoteId    String?         @unique
+  creditNote      Invoice?        @relation("CreditNote", fields: [creditNoteId], references: [id])
+  creditedBy      Invoice?        @relation("CreditNote")
+  auditEvents     AuditEvent[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  DELIVERED
+  VIEWED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+  CREDITED
+}
+
+model InvoiceLine {
+  id          String   @id @default(cuid())
+  description String
+  quantity    Float
+  unitPrice   Float
+  vatRate     Float    @default(0.25)
+  amount      Float
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  amount        Float
+  currency      String        @default("NOK")
+  method        PaymentMethod
+  provider      String?
+  providerRef   String?
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum PaymentMethod {
+  CARD
+  VIPPS
+  BANK_TRANSFER
+  MANUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model EmailLog {
+  id          String      @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id])
+  recipient   String
+  subject     String
+  status      EmailStatus
+  provider    String?
+  messageId   String?
+  error       String?
+  sentAt      DateTime    @default(now())
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  BOUNCED
+  FAILED
+}
+
+model PaperMailLog {
+  id          String          @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice         @relation(fields: [invoiceId], references: [id])
+  recipient   String
+  address     String
+  status      PaperMailStatus
+  provider    String?
+  trackingId  String?
+  error       String?
+  createdAt   DateTime        @default(now())
+  sentAt      DateTime?
+}
+
+enum PaperMailStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model Attachment {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileUrl     String
+  fileSize    Int?
+  mimeType    String?
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model Reminder {
+  id          String       @id @default(cuid())
+  type        ReminderType
+  sentAt      DateTime     @default(now())
+  invoiceId   String
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id])
+}
+
+enum ReminderType {
+  FIRST
+  SECOND
+  COLLECTION
+}
+
+model ApiKey {
+  id             String        @id @default(cuid())
+  name           String
+  keyHash        String        @unique
+  secret         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  lastUsedAt     DateTime?
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  secret    String
+  events    String[]
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         UserRole @default(USER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String
+  userId     String?
+  data       Json?
+  invoiceId  String?
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model ControlCheckLog {
+  id        String   @id @default(cuid())
+  checkType String
+  status    String
+  message   String?
+  data      Json?
+  createdAt DateTime @default(now())
+}
+
+
+model TaxOrder {
+  id                    String          @id @default(cuid())
+  externalOrderId       String          @unique
+  userId                String
+  userEmail             String
+  userName              String
+  taxBenefitAmount      Float
+  spouseTaxBenefit      Float?
+  totalTaxBenefit       Float
+  commissionRate        Float           @default(0.30)
+  commissionAmount      Float
+  status                TaxOrderStatus  @default(RECEIVED)
+  processedAt           DateTime?
+  invoiceId             String?         @unique
+  metadata              Json?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+enum TaxOrderStatus {
+  RECEIVED
+  PROCESSING
+  INVOICED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model WebhookOutgoing {
+  id          String   @id @default(cuid())
+  targetUrl   String
+  event       String
+  payload     Json
+  status      String   @default("PENDING")
+  attempts    Int      @default(0)
+  lastError   String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+}
